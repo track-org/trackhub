@@ -9,7 +9,7 @@ Do one meaningful nightly improvement. Prefer reusable skills, shared workflows,
 
 ## Core loop
 
-1. Review recent conversation/day context.
+1. Review the relevant recent conversation/day context.
 2. Pick one worthwhile improvement.
 3. Keep scope small enough to finish cleanly.
 4. Implement and verify it.
@@ -99,6 +99,18 @@ If local config provides a peer agent or shared channel:
 - if notification is required locally but unavailable from the runtime, record that as a blocker
 
 Read `references/peer-notification-delivery.md` before implementing or judging the peer-notification step.
+
+## Output discipline
+
+When asked to perform the nightly work, finish with a concise summary covering:
+- what was built or improved
+- where it lives
+- what was tested
+- whether it was committed/pushed
+- whether peer notification happened
+- whether memory/logging was updated
+- any remaining blocker
+otification step.
 
 ## Output discipline
 

@@ -4,7 +4,7 @@ Use this as a local template, not as shared hard-coded policy.
 
 ## Example heartbeat wording
 
-- Between 00:00 and 03:00 local time, use `nightly-skill-builder` to ship one meaningful reusable improvement based on that day's conversations.
+- Between 00:00 and 03:00 local time, use `nightly-skill-builder` to ship one meaningful reusable improvement based primarily on the previous local day's conversations, with any very recent post-midnight context treated only as spillover.
 - Prefer a new skill or a meaningful upgrade to an existing one.
 - Keep third-party API work read-only unless explicitly approved.
 - Do not count the task as complete until code is committed, pushed if required locally, peer notification is sent if configured, and a short success/blocker note is written to the daily memory file.
