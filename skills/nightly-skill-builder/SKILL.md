@@ -18,6 +18,8 @@ Do one meaningful nightly improvement. Prefer reusable skills, shared workflows,
 7. Notify a peer/channel if local config says to.
 8. Record success or blocker in the daily memory file.
 
+If the selected improvement is intended for the shared TrackHub repo and the runtime has the `trackhub-sync` skill available, prefer `trackhub-sync` for the publish/sync step instead of improvising the shared-repo workflow.
+
 Do not count the task as complete until the local completion checklist is satisfied.
 
 If the local runtime keeps lightweight notes during the day, use them as a shortlist. If not, reconstruct the shortlist from recent conversation and memory at night. Do not require elaborate daytime note-taking just to use this skill.

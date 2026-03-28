@@ -10,6 +10,7 @@ Decide these before using the skill in automation:
    - Which repo/path counts as the shared destination?
    - Are local commits allowed?
    - Are pushes allowed automatically, or only with explicit approval?
+   - If the shared destination is TrackHub, should the agent use `trackhub-sync` as the preferred publish/sync workflow?
 
 2. **Memory/logging target**
    - Where should success or blocker notes be written?

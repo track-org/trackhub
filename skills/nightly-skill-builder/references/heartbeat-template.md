@@ -12,8 +12,9 @@ Use this as a local template, not as shared hard-coded policy.
 ## Example cron wording
 
 - Run one nightly improvement pass.
-- Use `nightly-trackhub-builder`.
+- Use `nightly-skill-builder`.
 - Review recent conversations and select one small but worthwhile reusable improvement.
+- If the result belongs in TrackHub and `trackhub-sync` is available locally, use it for the publish/sync step.
 - Follow the local completion checklist.
 - If required local inputs are missing, record a blocker instead of guessing.
 
