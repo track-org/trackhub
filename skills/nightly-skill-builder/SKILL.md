@@ -93,7 +93,12 @@ For an example integration pattern, read `references/heartbeat-template.md`.
 If local config provides a peer agent or shared channel:
 - send a concise heads-up only after the work is genuinely shareable or complete enough to be useful
 - include what changed, why it matters, and where to look
+- use the runtime's correct public-delivery path for peer/channel notifications
+- if direct session messaging does not reliably create a public/shared-channel post, use a temporary one-shot job with native channel delivery instead
+- clean up temporary notification jobs after success, or use automatic deletion if the runtime supports it
 - if notification is required locally but unavailable from the runtime, record that as a blocker
+
+Read `references/peer-notification-delivery.md` before implementing or judging the peer-notification step.
 
 ## Output discipline
 
