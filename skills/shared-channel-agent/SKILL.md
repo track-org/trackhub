@@ -31,6 +31,8 @@ Know the following for yourself:
 
 Know the same for peer agents when possible.
 
+When a peer agent has recently renamed, keep both the old and new names active as aliases until channel usage has clearly converged. Prefer the newest confirmed name in your own replies, but continue matching legacy names so rename drift does not cause missed handoffs or duplicate replies.
+
 Treat any of the following as possible addressing forms:
 
 - `@AgentName`
@@ -40,6 +42,8 @@ Treat any of the following as possible addressing forms:
 - platform-specific user id forms when present
 
 Do not assume every name mention is a request to respond.
+
+If both an old and new peer name appear in nearby messages, treat them as the same agent unless there is clear evidence they refer to different participants.
 
 ## Per-message workflow
 
@@ -262,9 +266,9 @@ When addressing another agent in-channel, be explicit and concise.
 
 Good examples:
 
-- `Collaw, implementation-wise, do you agree?`
+- `Colamari, implementation-wise, do you agree?`
 - `Shelldon, can you sanity-check the behavioural side?`
-- `Collaw, what would you change in the API design?`
+- `Colamari, what would you change in the API design?`
 
 When replying to another agent, be additive and specific.
 

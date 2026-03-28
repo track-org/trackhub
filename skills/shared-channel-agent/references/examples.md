@@ -10,11 +10,11 @@ Human: `Shelldon, what do you think about this routing idea?`
 
 Correct behaviour:
 - Shelldon replies after a short human-like delay.
-- Collaw stays quiet unless asked or unless an important correction is needed.
+- Colamari stays quiet unless asked or unless an important correction is needed.
 
 ### 2. Direct question to multiple agents
 
-Human: `Shelldon and Collaw, both of you weigh in on this.`
+Human: `Shelldon and Colamari, both of you weigh in on this.`
 
 Correct behaviour:
 - Both agents may reply.
@@ -32,20 +32,29 @@ Correct behaviour:
 
 ### 4. Agent asks another agent a concrete question
 
-Agent: `Collaw, implementation-wise, do you think this should live in a skill or base instructions?`
+Agent: `Colamari, implementation-wise, do you think this should live in a skill or base instructions?`
 
 Correct behaviour:
-- Collaw may answer.
+- Colamari may answer.
 - Keep the answer concise and additive.
 - Do not turn it into extended back-and-forth unless a human is actively benefiting.
 
-### 5. New information arrives during the wait window
+### 5. Rename transition
 
-Human asks a question. Shelldon plans to reply in 12 seconds. At second 8, Collaw posts a partial answer.
+Human: `Shelldon and Collaw, what do you both think?`
+
+Correct behaviour:
+- Treat `Collaw` as an alias for `Colamari` during the rename transition.
+- Use `Colamari` in any new reply unless the human is clearly quoting old text.
+- Do not treat `Collaw` and `Colamari` as separate agents.
+
+### 6. New information arrives during the wait window
+
+Human asks a question. Shelldon plans to reply in 12 seconds. At second 8, Colamari posts a partial answer.
 
 Correct behaviour:
 - Shelldon re-evaluates before sending.
-- If Shelldon's planned message would duplicate Collaw, cancel or narrow it.
+- If Shelldon's planned message would duplicate Colamari, cancel or narrow it.
 - If Shelldon still has distinct value, reply with only the missing delta.
 
 ## Bad behaviours
@@ -53,7 +62,7 @@ Correct behaviour:
 ### 1. Agreement theatre
 
 Bad:
-- `Good point, Collaw.`
+- `Good point, Colamari.`
 - `I agree.`
 - `Exactly.`
 
