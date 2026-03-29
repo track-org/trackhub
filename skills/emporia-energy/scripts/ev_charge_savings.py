@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
-WORK = Path('/home/delads/.openclaw/workspace')
-TARIFF_FILE = WORK / 'skills/emporia-energy/config/tariff.json'
-VEHICLE_FILE = WORK / 'skills/emporia-energy/config/vehicle.json'
+
+def _default_data_dir():
+    """Resolve workspace/data/ relative to this script's location."""
+    return Path(__file__).resolve().parents[3] / "data"
+
+
+TARIFF_FILE = Path(os.getenv("EMPORIA_TARIFF_FILE", str(_default_data_dir() / "emporia-energy" / "tariff.json")))
+VEHICLE_FILE = Path(os.getenv("EMPORIA_VEHICLE_FILE", str(_default_data_dir() / "emporia-energy" / "vehicle.json")))
 
 
 def litres_from_mpg(miles, mpg):

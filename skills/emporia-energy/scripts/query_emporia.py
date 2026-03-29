@@ -79,17 +79,22 @@ def parse_hhmm(text):
     return int(hour), int(minute)
 
 
+def _default_data_dir():
+    """Resolve workspace/data/ relative to this script's location."""
+    return Path(__file__).resolve().parents[3] / "data"
+
+
 def load_tariff_config(path_str=None):
-    default_path = "/home/delads/.openclaw/workspace/skills/emporia-energy/config/tariff.json"
-    path = Path(path_str or os.getenv("EMPORIA_TARIFF_FILE", default_path))
+    default_path = _default_data_dir() / "emporia-energy" / "tariff.json"
+    path = Path(path_str or os.getenv("EMPORIA_TARIFF_FILE", str(default_path)))
     if not path.exists():
         return None
     return json.loads(path.read_text())
 
 
 def load_vehicle_config(path_str=None):
-    default_path = "/home/delads/.openclaw/workspace/skills/emporia-energy/config/vehicle.json"
-    path = Path(path_str or os.getenv("EMPORIA_VEHICLE_FILE", default_path))
+    default_path = _default_data_dir() / "emporia-energy" / "vehicle.json"
+    path = Path(path_str or os.getenv("EMPORIA_VEHICLE_FILE", str(default_path)))
     if not path.exists():
         return None
     return json.loads(path.read_text()).get("vehicle")
@@ -143,7 +148,7 @@ def estimate_ev_savings(kwh, charge_cost, vehicle, petrol_price_per_litre=None):
         "equivalent_petrol_cost": None,
         "estimated_savings": None,
         "petrol_type": vehicle.get("petrol_type"),
-        "vehicle_config_source": os.getenv("EMPORIA_VEHICLE_FILE", "/home/delads/.openclaw/workspace/skills/emporia-energy/config/vehicle.json"),
+        "vehicle_config_source": os.getenv("EMPORIA_VEHICLE_FILE", str(_default_data_dir() / "emporia-energy" / "vehicle.json")),
     }
     if petrol_price_per_litre not in (None, 0):
         litres = litres_from_mpg(electric_miles, float(petrol_mpg))
@@ -221,7 +226,7 @@ def estimate_costs(vue, usage, tariff):
         "total_cost": total_cost,
         "by_rate": dict(sorted(totals_by_rate.items())),
         "hourly": hourly_breakdown,
-        "tariff_source": os.getenv("EMPORIA_TARIFF_FILE", "/home/delads/.openclaw/workspace/skills/emporia-energy/config/tariff.json"),
+        "tariff_source": os.getenv("EMPORIA_TARIFF_FILE", str(_default_data_dir() / "emporia-energy" / "tariff.json")),
     }
 
 
@@ -341,7 +346,7 @@ def main():
         "top_items": items[: max(args.top, 0)],
         "device_totals_kwh": dict(sorted(totals_by_device.items(), key=lambda kv: kv[1], reverse=True)),
         "tariff": {
-            "source": os.getenv("EMPORIA_TARIFF_FILE", "/home/delads/.openclaw/workspace/skills/emporia-energy/config/tariff.json"),
+            "source": os.getenv("EMPORIA_TARIFF_FILE", str(_default_data_dir() / "emporia-energy" / "tariff.json")),
             "loaded": bool(tariff),
             "currency": tariff.get("currency") if tariff else None,
             "timezone": tariff.get("timezone") if tariff else None,
@@ -349,7 +354,7 @@ def main():
         "cost_estimates": cost_estimates,
         "vehicle": {
             "loaded": bool(vehicle),
-            "source": os.getenv("EMPORIA_VEHICLE_FILE", "/home/delads/.openclaw/workspace/skills/emporia-energy/config/vehicle.json"),
+            "source": os.getenv("EMPORIA_VEHICLE_FILE", str(_default_data_dir() / "emporia-energy" / "vehicle.json")),
             "name": vehicle.get("name") if vehicle else None,
         },
         "ev_savings": ev_savings,

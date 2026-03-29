@@ -10,6 +10,9 @@ secrets/
 config/token*
 config/keys*
 
+# Local runtime data (lives in workspace/data/, not in trackhub)
+data/
+
 # Python
 __pycache__/
 *.pyc
