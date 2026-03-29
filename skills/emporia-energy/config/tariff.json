@@ -1,0 +1,35 @@
+{
+  "currency": "EUR",
+  "timezone": "Europe/Dublin",
+  "rates": [
+    {
+      "name": "night",
+      "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      "start": "23:00",
+      "end": "08:00",
+      "unit_rate": 0.2463,
+      "unit": "EUR/kWh"
+    },
+    {
+      "name": "peak",
+      "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      "start": "17:00",
+      "end": "19:00",
+      "unit_rate": 0.4293,
+      "unit": "EUR/kWh"
+    },
+    {
+      "name": "day",
+      "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      "start": "08:00",
+      "end": "23:00",
+      "unit_rate": 0.3833,
+      "unit": "EUR/kWh"
+    }
+  ],
+  "notes": [
+    "Priority matters when windows overlap; earlier entries win.",
+    "Night wraps midnight from 23:00 to 08:00.",
+    "Peak overrides day from 17:00 to 19:00."
+  ]
+}

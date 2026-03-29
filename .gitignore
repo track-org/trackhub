@@ -1,0 +1,28 @@
+# Secrets and credentials — never commit
+*.env
+*.env.local
+.env
+.env.*
+secrets/
+*.json.local
+*.pem
+*.key
+config/token*
+config/keys*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vendor / bundled dependencies (install locally, don't commit)
+vendor/
+node_modules/
+
+# IDE
+.vscode/
+.idea/

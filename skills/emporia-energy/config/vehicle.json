@@ -1,0 +1,13 @@
+{
+  "vehicle": {
+    "name": "Lexus NX450h+",
+    "ev_efficiency_miles_per_kwh": 3.1,
+    "petrol_efficiency_mpg": 49.0,
+    "petrol_type": "unleaded",
+    "notes": [
+      "EV efficiency uses a reasonable real-world average for NX450h+ owner-reported driving.",
+      "Petrol efficiency is a middle-of-the-road depleted-battery real-world estimate.",
+      "Update these if Don provides measured personal figures."
+    ]
+  }
+}
