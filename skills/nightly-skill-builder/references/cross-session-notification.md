@@ -53,6 +53,16 @@ If the agent has `sessions_spawn` available, spawning a sub-agent that has acces
 | Agent in a TUI session wants to post to Slack | Use the `slack` tool directly |
 | Peer agent sync across runtimes | One-shot cron to the shared channel |
 
+## Important: how --announce actually works
+
+The `--announce` flag delivers the agent's **final response** to the target channel at the runtime level — the agent itself does NOT need access to the slack tool. The agent's job is simply to produce the right output text; the runtime handles delivery.
+
+This means:
+- The agent prompt should tell the agent to **reply with exactly the message** you want posted
+- The agent will likely try (and fail) to use tools like `slack` or `sessions_send` — that's fine, as long as its final text output is the message
+- For reliability, use `--light-context` and simple instructions like "Reply with exactly this text and nothing else: <message>"
+- Check delivery status with `openclaw cron list --json` — look for `lastDeliveryStatus: "delivered"`
+
 ## Gotchas
 
 - `--to` format varies by channel: Slack uses `channel:C123`, Discord uses the channel ID directly, Telegram uses the chat ID
