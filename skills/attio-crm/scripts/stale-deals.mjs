@@ -1,4 +1,4 @@
-import { attioRequest } from './attio-client.mjs';
+import { attioRequest } from './lib/attio-client.mjs';
 
 function getName(record) {
   return record?.values?.name?.[0]?.value || 'Untitled deal';

@@ -1,4 +1,4 @@
-import { attioRequest } from './attio-client.mjs';
+import { attioRequest } from './lib/attio-client.mjs';
 
 try {
   const data = await attioRequest('/v2/objects');

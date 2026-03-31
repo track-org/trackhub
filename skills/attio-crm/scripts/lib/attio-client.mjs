@@ -5,7 +5,7 @@ function loadEnv() {
   // Check explicit env var first, then fall back to workspace/.env
   // (scripts/ → attio-crm/ → trackhub/ → workspace/)
   const envFile = process.env.ATTIO_ENV_FILE ||
-    path.resolve(import.meta.dirname, '..', '..', '..', '.env');
+    path.resolve(import.meta.dirname, '..', '..', '..', '..', '.env');
 
   if (!fs.existsSync(envFile)) return;
   const lines = fs.readFileSync(envFile, 'utf8').split(/\r?\n/);

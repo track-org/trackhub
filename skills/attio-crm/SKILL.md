@@ -31,14 +31,9 @@ Read-only integration with [Attio](https://www.attio.com/) CRM for querying deal
 
 This skill provides Node.js scripts that query the Attio REST API v2 to produce deal pipeline reports, stage change digests, and stale-deal alerts. All operations are **read-only** — no creates, updates, or deletes.
 
-## Required Environment Variables
+## Connectors
 
-| Variable | Description | Location |
-|---|---|---|
-| `ATTIO_API_KEY` | Bearer token for Attio API | `workspace/.env` |
-| `ATTIO_API_BASE_URL` | API base URL (optional, defaults to `https://api.attio.com`) | `workspace/.env` |
-
-The scripts auto-load `workspace/.env` by resolving it relative to their own install location (`scripts/` → `attio-crm/` → `trackhub/` → `workspace/`). Override with `ATTIO_ENV_FILE` if needed.
+This skill uses the `attio` connector, which provides `ATTIO_API_KEY` and `ATTIO_API_BASE_URL` as environment variables to scripts.
 
 ## Local Data Convention
 
@@ -51,19 +46,14 @@ These files are **not** in trackhub — they contain workspace-specific schema a
 
 ## Commands
 
-All scripts are at `{baseDir}/scripts/` where `{baseDir}` resolves to the skill's install location. To locate it at runtime:
+Scripts are self-contained and run from the skill's `scripts/` directory.
 
-```bash
-# From within an OpenClaw runtime:
-SKILL_DIR=$(find /home/delads/.openclaw/workspace/trackhub/skills/attio-crm -maxdepth 0 -type d 2>/dev/null)
-```
+### Daily stage changes
 
-### `daily-stage-changes.mjs`
+Report deals that changed stage in the last N hours, with Slack-formatted output.
 
-Recent deal stage changes with Slack-formatted output.
-
-```bash
-node {baseDir}/scripts/daily-stage-changes.mjs [--hours=N] [--json]
+```sh
+node scripts/daily-stage-changes.mjs [--hours=N] [--json]
 ```
 
 - `--hours=N` — look-back window in hours (default: 24)
@@ -71,24 +61,24 @@ node {baseDir}/scripts/daily-stage-changes.mjs [--hours=N] [--json]
 
 Output includes: deal name, company, new stage, value, time since change, and clickable Attio URLs.
 
-### `pipeline-summary.mjs`
+### Pipeline summary
 
 Full pipeline snapshot grouped by stage.
 
-```bash
-node {baseDir}/scripts/pipeline-summary.mjs [--json]
+```sh
+node scripts/pipeline-summary.mjs [--json]
 ```
 
 - `--json` — output structured JSON instead of human-readable text
 
 Shows total deals, total value, and per-stage breakdowns sorted by value.
 
-### `stale-deals.mjs`
+### Stale deals
 
 Deals that haven't moved in a while.
 
-```bash
-node {baseDir}/scripts/stale-deals.mjs [--days=N] [--json]
+```sh
+node scripts/stale-deals.mjs [--days=N] [--json]
 ```
 
 - `--days=N` — minimum age threshold in days (default: 14)
@@ -96,12 +86,12 @@ node {baseDir}/scripts/stale-deals.mjs [--days=N] [--json]
 
 Excludes "Won 🎉" and "Disqualified" stages.
 
-### `test-attio.mjs`
+### Test connectivity
 
-Connectivity and auth test.
+Verify Attio API auth is working.
 
-```bash
-node {baseDir}/scripts/test-attio.mjs
+```sh
+node scripts/test-attio.mjs
 ```
 
 Lists all accessible CRM objects with their API slugs.
@@ -115,7 +105,7 @@ openclaw cron create \
   --name "Attio stage changes to #product" \
   --schedule "0 9 * * 1-5" \
   --channel "C0XXXX" \
-  --message "Run: node /home/delads/.openclaw/workspace/trackhub/skills/attio-crm/scripts/daily-stage-changes.mjs. Reply with only the script output, no preamble or commentary."
+  --message "Run: node scripts/daily-stage-changes.mjs. Reply with only the script output, no preamble or commentary."
 ```
 
 ## Data Notes
