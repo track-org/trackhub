@@ -1,6 +1,26 @@
 ---
-name: attio-crm
+name: Attio CRM
+slug: attio-crm
 description: Query Attio CRM data for deals, companies, and pipeline status. Read-only. Use when asked about deal pipeline, stage changes, stale deals, company data, or CRM reports. Scripts provide structured JSON or Slack-formatted output.
+skill-type: standard
+category: customer-success
+tags: [crm, attio, pipeline, deals, stages, reporting]
+suggested-connectors: [attio]
+suggested-job-type: chat
+suggested-schedule-frequency: daily
+suggested-schedule-hour: 9
+suggested-schedule-minute: 0
+memory-paths-writes: []
+memory-paths-reads: []
+available-scripts:
+  - name: daily-stage-changes
+    description: Report deals that changed stage in the last N hours
+  - name: pipeline-summary
+    description: Summarise current pipeline by stage
+  - name: stale-deals
+    description: Find deals with no activity in N days
+  - name: test-attio
+    description: Connectivity and auth test
 ---
 
 # Attio CRM Skill
