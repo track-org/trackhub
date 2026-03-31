@@ -86,6 +86,40 @@ node scripts/stale-deals.mjs [--days=N] [--json]
 
 Excludes "Won 🎉" and "Disqualified" stages.
 
+### List / filter deals
+
+Flexible deal listing with stage filtering and multiple output formats.
+
+```sh
+node scripts/list-deals.mjs [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--stage <name>` | Filter by stage (partial match — "won" matches "Won 🎉") |
+| `--exclude <name>` | Exclude stages (can be used multiple times) |
+| `--format <fmt>` | `grouped` (default), `flat`, or `names` |
+| `--min-age-hours <N>` | Only deals whose stage hasn't changed in N hours |
+| `--json` | Output structured JSON |
+
+Examples:
+```sh
+# All deals grouped by stage
+node scripts/list-deals.mjs
+
+# Only closed won
+node scripts/list-deals.mjs --stage won
+
+# All deals except disqualified, flat list
+node scripts/list-deals.mjs --exclude disqualified --format flat
+
+# Just company names
+node scripts/list-deals.mjs --format names
+
+# JSON output for programmatic use
+node scripts/list-deals.mjs --stage live --json
+```
+
 ### Test connectivity
 
 Verify Attio API auth is working.
