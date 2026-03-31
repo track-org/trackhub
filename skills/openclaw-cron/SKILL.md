@@ -228,6 +228,10 @@ Reminder: it is time to send the daily update.
 - ❌ Forgetting to specify NO_REPLY for silent conditions — LLM will ramble
 - ✅ Numbered steps, clear script paths, explicit output rules, inline error handling
 
+## Quick Decision Reference
+
+For a flowchart-style guide when designing a new cron job — "what schedule? what sessionTarget? what payload? what delivery?" — see [`references/cron-decision-tree.md`](references/cron-decision-tree.md). Covers common copy-paste starting points too.
+
 ## Debugging Failed Runs
 
 1. `openclaw cron runs --id <id> --limit 3` — check recent status and error messages
