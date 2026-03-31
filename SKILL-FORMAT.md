@@ -10,9 +10,29 @@
 skill-name/
 ├── SKILL.md          # Required — YAML frontmatter + markdown instructions
 ├── scripts/          # Optional — executable scripts the agent can run
+│   └── lib/          # Optional — shared modules for scripts
 ├── references/       # Optional — supporting docs loaded on demand
 └── assets/           # Optional — additional resources
 ```
+
+---
+
+## Execution Model
+
+Skills use **standalone scripts** as the primary execution mechanism. Scripts are self-contained programs in the `scripts/` directory that the LLM runs via `skill_exec`. The platform injects connector credentials as environment variables.
+
+```
+LLM reads SKILL.md instructions (auto-injected into system prompt)
+  → LLM calls skill_exec(skill_slug, command)
+    → Platform materialises scripts to temp dir
+    → Platform injects connector env vars (ATTIO_API_KEY, etc.)
+    → /bin/sh -c executes the command
+    → stdout returned to LLM
+```
+
+This model is portable — skills authored for Track work on any [agentskills.io](https://agentskills.io)-compatible platform (Claude Code, OpenClaw, etc.) because the scripts are self-contained and the SKILL.md instructions reference them via standard shell commands.
+
+For memory operations (reading/writing persistent state), skills use the platform's built-in `memory_read`, `memory_write`, and `memory_list` tools directly — no scripts needed.
 
 ---
 
@@ -28,7 +48,7 @@ description: One-line description of what this skill does and when to use it.
 skill-type: standard
 category: domain-category
 tags: [tag1, tag2]
-suggested-connectors: [attio, hubspot]
+suggested-connectors: [attio]
 suggested-job-type: chat
 suggested-schedule-frequency: daily
 suggested-schedule-hour: 9
@@ -36,9 +56,6 @@ suggested-schedule-minute: 0
 memory-paths-writes: [customers/*, activity-log/*]
 memory-paths-reads: [customer-index.md]
 depends-on-skills: [crm-enrichment]
-skill-functions:
-  - name: functionName
-    description: What this function does
 available-scripts:
   - name: script-name
     description: What this script does
@@ -76,7 +93,6 @@ available-scripts:
 | `memory-paths-writes` | string[] | Paths this skill may write to. **Enforced** at the tool level |
 | `memory-paths-reads` | string[] | Paths this skill reads from. Informational only, not enforced |
 | `depends-on-skills` | string[] | Advisory. Shown as "For best results, also install X" |
-| `skill-functions` | block sequence | Server-side functions this skill uses (see format below) |
 | `available-scripts` | block sequence | Executable scripts bundled with this skill (see format below) |
 
 ### Memory Path Scoping
@@ -87,26 +103,77 @@ available-scripts:
 
 ---
 
-## Block Sequence Fields
+## Scripts
 
-`skill-functions` and `available-scripts` use YAML block sequence format. Each item has `name` and `description`:
+Scripts are the primary way skills interact with external APIs. They are self-contained programs in the `scripts/` directory that:
+
+- Read connector credentials from environment variables (e.g. `ATTIO_API_KEY`)
+- Accept arguments via CLI flags (e.g. `--object companies --json`)
+- Output structured data (JSON) to stdout
+- Output diagnostics/errors to stderr
+- Have zero npm dependencies — use Node 18+ built-in `fetch`
+
+### Declaring Scripts
+
+List scripts in the `available-scripts` frontmatter field:
 
 ```yaml
-skill-functions:
-  - name: attioQuery
-    description: Query Attio CRM data (records, pipeline, velocity, stage changes)
-  - name: hubspotQuery
-    description: Query HubSpot CRM data (records, pipeline, velocity, stage changes)
-
 available-scripts:
+  - name: query-records
+    description: Search, list, filter, or count Attio object records
   - name: pipeline-summary
-    description: Summarise current pipeline by stage
-  - name: daily-stage-changes
-    description: Report deals that changed stage in the last N hours
+    description: Summarise pipeline entries grouped by stage with counts
 ```
 
-- `skill-functions` are server-side Node.js functions invoked via `skill_run_function`.
-- `available-scripts` are standalone programs in the `scripts/` directory invoked via `skill_run_script`. Script files should be `.mjs`, `.js`, or `.sh`.
+### Referencing Scripts in Instructions
+
+The SKILL.md markdown body tells the LLM exactly what commands to run:
+
+````markdown
+### List all companies
+```sh
+node scripts/query-records.mjs --object companies --fetch-all --json
+```
+
+### Pipeline summary
+```sh
+node scripts/pipeline-summary.mjs --json
+```
+````
+
+The LLM executes these via `skill_exec`:
+```
+skill_exec(skill_slug="attio-crm-scripts", command="node scripts/query-records.mjs --object companies --json")
+```
+
+### Script Design Guidelines
+
+- **Include `--help`** — the LLM uses this to discover the script's interface
+- **Accept `--json`** — always support structured JSON output
+- **Use `--` flags for all inputs** — no positional arguments; flags are self-documenting
+- **Write errors to stderr** — keep stdout clean for data
+- **Exit 0 on success, 1 on error** — with a clear error message on stderr
+- **Be idempotent** — agents may retry commands
+- **Cap output size** — default to summaries; use `--limit` or `--offset` flags for pagination
+- **Pin dependency versions** — if using inline deps (PEP 723, Deno `npm:`), pin them
+
+### Shared Modules
+
+For scripts within the same skill that share logic (fetch helpers, retry logic), use a `scripts/lib/` directory:
+
+```
+scripts/
+├── lib/
+│   └── attio-client.mjs    # Shared fetch + retry + rate limiting
+├── query-records.mjs
+├── pipeline-summary.mjs
+└── stage-changes.mjs
+```
+
+Scripts import shared modules via relative paths:
+```javascript
+import { attioFetch, parseArgs } from './lib/attio-client.mjs';
+```
 
 ---
 
@@ -129,6 +196,24 @@ Only connectors listed in `suggested-connectors` are resolved for script executi
 
 ---
 
+## Platform Tools
+
+In addition to scripts, the LLM has access to built-in platform tools for memory and skill management:
+
+| Tool | Purpose |
+|------|---------|
+| `memory_read` | Read a file from the team's memory store |
+| `memory_write` | Write/update a file in the team's memory store |
+| `memory_list` | List files in memory by prefix |
+| `skill_exec` | Execute a shell command in a skill's sandboxed directory |
+| `skill_activate` | Load a skill's reference files (rarely needed — SKILL.md is auto-injected) |
+| `skill_read_file` | Read a specific file from a skill's directory |
+| `skill_list_files` | List files in a skill's directory |
+
+Skills that only read/write memory (report skills, enrichment skills) may not need any scripts — they use `memory_read`/`memory_write` directly, guided by SKILL.md instructions.
+
+---
+
 ## Frontmatter Parser Notes
 
 Track's parser is intentionally simple. Follow these rules:
@@ -143,33 +228,39 @@ Track's parser is intentionally simple. Follow these rules:
 
 ## Examples
 
-### Chat skill with CRM functions
+### CRM query skill with scripts
 
 ```yaml
 ---
-name: Pipeline Query
-slug: pipeline-query
-description: Answers questions about current pipeline state, stage counts, deal distribution, and stage changes by querying the CRM directly.
+name: Attio CRM Scripts
+slug: attio-crm-scripts
+description: Query Attio CRM data using standalone scripts. Supports listing records, filtering, counting, and pipeline summaries.
 skill-type: standard
 category: customer-success
-tags: [pipeline, crm, stages, deals, query]
-suggested-connectors: [attio, hubspot]
+tags: [attio, crm, pipeline, deals, companies, query, scripts]
+suggested-connectors: [attio]
 suggested-job-type: chat
-skill-functions:
-  - name: attioQuery
-    description: Query Attio CRM data (records, pipeline, velocity, stage changes, record details)
-  - name: hubspotQuery
-    description: Query HubSpot CRM data (records, pipeline, velocity, stage changes, record details)
+available-scripts:
+  - name: query-records
+    description: Search, list, filter, or count Attio object records
+  - name: pipeline-summary
+    description: Summarise pipeline entries grouped by stage with counts
+  - name: get-record
+    description: Fetch a single record by ID with optional change history
+  - name: pipeline-velocity
+    description: Analyse time-in-stage statistics across pipeline records
+  - name: stage-changes
+    description: Find records whose stage changed within a date range
 ---
 ```
 
-### Scheduled report with memory reads and dependencies
+### Scheduled report using memory tools
 
 ```yaml
 ---
 name: Customer Status Report
 slug: customer-status-report
-description: Generates a summary report of customer status, recent activity, and key highlights from enriched CRM data.
+description: Reads enriched customer data from memory and generates a summary report of customer status, recent activity, and key highlights.
 skill-type: standard
 category: customer-success
 tags: [customers, crm, status, reporting]
@@ -180,31 +271,24 @@ suggested-schedule-hour: 9
 memory-paths-writes: []
 memory-paths-reads: [customer-index.md, customers/*/status.md, activity-log/*]
 depends-on-skills: [crm-enrichment]
-skill-functions:
-  - name: listTrackedCustomers
-    description: List all tracked customers from the index
-  - name: bulkReadCustomerStatuses
-    description: Bulk read customer status files from memory
 ---
 ```
 
-### Script-based skill
+### Enrichment skill with scripts and memory writes
 
 ```yaml
 ---
-name: Pipeline Scripts
-slug: pipeline-scripts
-description: Executable scripts for pipeline reporting and analysis.
+name: CRM Enrichment
+slug: crm-enrichment
+description: Enriches and maintains per-customer status files by correlating CRM records, meeting notes, and KB documents.
 skill-type: standard
 category: customer-success
-tags: [pipeline, scripts, reporting]
-suggested-connectors: [attio]
-available-scripts:
-  - name: pipeline-summary
-    description: Summarise current pipeline by stage
-  - name: daily-stage-changes
-    description: Report deals that changed stage in the last N hours
-  - name: stale-deals
-    description: Find deals with no activity in N days
+tags: [customers, crm, meetings, enrichment]
+suggested-connectors: [attio, hubspot, granola, slack]
+suggested-job-type: background
+suggested-schedule-frequency: daily
+suggested-schedule-hour: 2
+memory-paths-writes: [customers/*/status.md, customers/*/notes/*.md, customer-index.md, activity-log/*]
+memory-paths-reads: [customers/*/status.md, customers/*/notes/*.md, customer-index.md]
 ---
 ```
