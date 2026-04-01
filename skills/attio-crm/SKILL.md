@@ -15,6 +15,8 @@ memory-paths-reads: []
 available-scripts:
   - name: daily-stage-changes
     description: Report deals that changed stage in the last N hours
+  - name: list-deals
+    description: Flexible deal listing with stage filtering, exclusion, and multiple output formats
   - name: pipeline-summary
     description: Summarise current pipeline by stage
   - name: stale-deals
