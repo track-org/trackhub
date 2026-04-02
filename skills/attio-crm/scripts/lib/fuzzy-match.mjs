@@ -1,5 +1,5 @@
 /**
- * fuzzy-match.mjs — Lightweight fuzzy matching against a schema
+ * fuzzy-match.mjs — Lightweight fuzzy matching against known values
  *
  * Matches user input against a list of known values (stage names,
  * attribute slugs, company stages, etc.) using a cascade of strategies:
@@ -13,13 +13,16 @@
  * schema value, so API calls always use the canonical form.
  *
  * Usage:
- *   import { fuzzyMatch, fuzzyMatchMultiple } from './fuzzy-match.mjs';
+ *   import { fuzzyMatch, fuzzyMatchMultiple, normalise } from './fuzzy-match.mjs';
  *
  *   const result = fuzzyMatch('won', ['Won 🎉', 'Disqualified', 'Lead', 'Live']);
  *   // → { match: 'Won 🎉', score: 1, method: 'exact' }
  *
  *   const result = fuzzyMatch('disqulified', stageNames);
  *   // → { match: 'Disqualified', score: 0.95, method: 'levenshtein' }
+ *
+ * Schema loading is handled by the consuming script (e.g. pipeline-query.mjs)
+ * via the ATTIO_SCHEMA env var. This module is pure matching logic.
  */
 
 /**
@@ -45,7 +48,6 @@ function levenshtein(a, b) {
   if (m === 0) return n;
   if (n === 0) return m;
 
-  // Use single-row optimisation
   let prev = new Array(n + 1);
   let curr = new Array(n + 1);
 
@@ -56,9 +58,9 @@ function levenshtein(a, b) {
     for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       curr[j] = Math.min(
-        prev[j] + 1,       // deletion
-        curr[j - 1] + 1,   // insertion
-        prev[j - 1] + cost // substitution
+        prev[j] + 1,
+        curr[j - 1] + 1,
+        prev[j - 1] + cost
       );
     }
     [prev, curr] = [curr, prev];
@@ -122,7 +124,6 @@ export function fuzzyMatch(query, candidates, opts = {}) {
         ? { match: matches[0], score: 1, method: 'normalised', allMatches: matches.map(v => ({ value: v, score: 1, method: 'normalised' })) }
         : { match: matches[0], score: 1, method: 'normalised' };
     }
-    // Ambiguous — multiple candidates normalise to same thing
     if (returnAll) {
       return { match: matches[0], score: 1, method: 'normalised', ambiguous: true, allMatches: matches.map(v => ({ value: v, score: 1, method: 'normalised' })) };
     }

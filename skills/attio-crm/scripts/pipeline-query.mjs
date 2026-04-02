@@ -3,13 +3,13 @@
  * pipeline-query.mjs — Unified Attio pipeline query tool
  *
  * A single script with multiple query modes for CRM pipeline analysis.
- * Uses schema-cached fuzzy matching so the LLM doesn't need to know
- * exact stage names or field slugs.
+ * Uses ATTIO_SCHEMA env var (set by Track server) for fuzzy matching
+ * against real stage names and field values. If ATTIO_SCHEMA is not
+ * available, falls back to raw case-insensitive matching with a warning.
  *
  * Usage:
  *   node pipeline-query.mjs --mode <mode> [options]
  *   node pipeline-query.mjs --help
- *   node pipeline-query.mjs --refresh-schema
  *
  * Modes:
  *   snapshot    — Pipeline overview grouped by stage
@@ -22,16 +22,87 @@
  *   help        — Show available modes, flags, and intent mapping
  */
 
+import fs from 'node:fs';
 import { attioRequest } from './lib/attio-client.mjs';
-import { loadSchema, refreshSchema } from './lib/schema-cache.mjs';
 import { fuzzyMatch, fuzzyMatchMultiple } from './lib/fuzzy-match.mjs';
+
+// ── Schema Loading (from ATTIO_SCHEMA env var) ──────────────────────
+
+/**
+ * Load schema from the ATTIO_SCHEMA env var (JSON string or file path).
+ * Expected structure: { stages: [{ title: string, ... }], companyStages: [{ title: string, ... }], ... }
+ * Returns null if not available.
+ */
+function loadAttioSchema() {
+  const raw = process.env.ATTIO_SCHEMA;
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // Might be a file path
+    try {
+      const content = fs.readFileSync(raw, 'utf8');
+      return JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Extract stage name strings from the schema object.
+ * Falls back to empty array if schema or stages not available.
+ */
+function getStageNames(schema) {
+  if (!schema?.stages || !Array.isArray(schema.stages)) return [];
+  return schema.stages
+    .filter(s => !s.is_archived)
+    .map(s => s.title)
+    .filter(Boolean);
+}
+
+/**
+ * Match a stage name using fuzzy logic if schema is available,
+ * or raw case-insensitive matching as fallback.
+ */
+function resolveStage(query, candidates) {
+  if (!query) return null;
+
+  // No candidates = no schema = raw matching fallback
+  if (!candidates.length) {
+    const q = query.toLowerCase().trim();
+    // Try substring match as best-effort fallback
+    return q; // return raw — caller will do their own includes() check
+  }
+
+  try {
+    const result = fuzzyMatch(query, candidates);
+    return result?.match || null;
+  } catch (err) {
+    // Ambiguous — return the query as-is and let filtering handle it loosely
+    return query;
+  }
+}
+
+/**
+ * Resolve multiple stage names (for --exclude).
+ */
+function resolveStages(queries, candidates) {
+  if (!candidates.length) {
+    // No schema — return lowercase versions for raw matching
+    return queries.map(q => q.toLowerCase().trim());
+  }
+
+  const resolved = fuzzyMatchMultiple(queries, candidates);
+  return resolved.map(r => r.match || r.query);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function getName(r) { return r?.values?.name?.[0]?.value || 'Untitled deal'; }
 function getStage(r) { return r?.values?.stage?.[0]?.status?.title || 'Unknown'; }
 function getStageChanged(r) { return r?.values?.stage?.[0]?.active_from || null; }
-function getStageId(r) { return r?.values?.stage?.[0]?.status?.id?.status_id || null; }
 function getCompanyId(r) { return r?.values?.associated_company?.[0]?.target_record_id || null; }
 function getOwnerId(r) { return r?.values?.owner?.[0]?.referenced_actor_id || null; }
 function getCreatedAt(r) { return r?.values?.created_at?.[0]?.value || null; }
@@ -73,7 +144,7 @@ function parsePeriod(period) {
   start.setHours(0, 0, 0, 0);
 
   if (p === 'week' || p === 'w') {
-    start.setDate(start.getDate() - start.getDay() + 1); // Monday
+    start.setDate(start.getDate() - start.getDay() + 1);
   } else if (p === 'month' || p === 'm') {
     start.setDate(1);
   } else if (p === 'quarter' || p === 'q') {
@@ -238,17 +309,15 @@ function modeForecast(deals, opts) {
   const stageWeights = {
     'lead': 0.1,
     'live': 0.4,
-    // Won/Disqualified don't matter — they're closed
   };
 
-  // Weighted pipeline
   let weightedValue = 0;
   let totalOpenValue = 0;
   const byStage = new Map();
 
   for (const d of openDeals) {
     totalOpenValue += d.value;
-    const weight = stageWeights[d.stage.toLowerCase()] || 0.2; // default 20%
+    const weight = stageWeights[d.stage.toLowerCase()] || 0.2;
     weightedValue += d.value * weight;
     if (!byStage.has(d.stage)) byStage.set(d.stage, { stage: d.stage, count: 0, value: 0, weighted: 0 });
     const b = byStage.get(d.stage);
@@ -257,13 +326,11 @@ function modeForecast(deals, opts) {
     b.weighted += d.value * weight;
   }
 
-  // Deals created this period
   const createdThisPeriod = deals.filter(d => {
     if (!d.createdAt) return false;
     return new Date(d.createdAt) >= period.start && new Date(d.createdAt) <= period.end;
   });
 
-  // Recently closed won this period
   const wonThisPeriod = deals.filter(d => {
     if (!d.stage.toLowerCase().includes('won')) return false;
     if (!d.stageChangedAt) return false;
@@ -311,15 +378,11 @@ function modeHealth(deals, opts) {
 
   for (const d of openDeals) {
     const dealIssues = [];
-
     if (d.value === 0 || d.value === null) dealIssues.push('no value set');
     if (!d.company) dealIssues.push('no company linked');
     if (!d.companyStage) dealIssues.push('no company stage');
     if (d.daysSinceStageChange !== null && d.daysSinceStageChange >= 30) dealIssues.push(`stale ${d.daysSinceStageChange}d in stage`);
-
-    if (dealIssues.length > 0) {
-      issues.push({ ...d, issues: dealIssues });
-    }
+    if (dealIssues.length > 0) issues.push({ ...d, issues: dealIssues });
   }
 
   issues.sort((a, b) => b.value - a.value);
@@ -419,7 +482,6 @@ function modeHygiene(deals, opts) {
   };
 
   const stages = [...new Set(deals.map(d => d.stage))];
-  // Heuristic: first stage is the one with the oldest created_at that isn't closed
   const nonClosedStages = stages.filter(s => !isClosedStage(s));
   const firstStage = nonClosedStages.length > 0 ? nonClosedStages[0] : null;
 
@@ -533,18 +595,11 @@ function modeHelp() {
       { mode: 'hygiene', description: 'Data quality issues (missing fields, zombies)', flags: ['--json'] },
       { mode: 'movements', description: 'Recent stage changes', flags: ['--days=N (default: 7)', '--json'] },
     ],
-    globalFlags: [
-      '--json',
-      '--refresh-schema',
-      '--help',
-    ],
+    globalFlags: ['--json', '--help'],
     fuzzyMatching: {
-      description: 'Stage names, company stages, and other filter values are fuzzy-matched against the cached schema. Typos and partial matches are handled automatically.',
-      examples: [
-        { input: 'won', matches: 'Won 🎉' },
-        { input: 'disqulified', matches: 'Disqualified' },
-        { input: 'lead', matches: 'Lead' },
-      ],
+      description: 'Stage names and filter values are fuzzy-matched against the ATTIO_SCHEMA env var (provided by Track server). If ATTIO_SCHEMA is not set, falls back to case-insensitive substring matching.',
+      envVar: 'ATTIO_SCHEMA',
+      expectedFormat: '{ "stages": [{ "title": "Lead", "id": "...", "is_archived": false }], "companyStages": [...] }',
     },
     intentMap: [
       { userSays: 'pipeline overview / total value / show me the pipeline', use: '--mode snapshot' },
@@ -565,7 +620,6 @@ function parseArgs() {
   const opts = {
     mode: null,
     json: false,
-    refreshSchema: false,
     stage: null,
     exclude: [],
     days: null,
@@ -575,14 +629,13 @@ function parseArgs() {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--json') opts.json = true;
-    else if (arg === '--refresh-schema') opts.refreshSchema = true;
     else if (arg === '--help' || arg === '-h') opts.mode = 'help';
     else if (arg === '--mode' && args[i + 1]) opts.mode = args[++i];
     else if (arg === '--stage' && args[i + 1]) opts.stage = args[++i];
     else if (arg === '--exclude' && args[i + 1]) opts.exclude.push(args[++i]);
     else if (arg === '--days' && args[i + 1]) opts.days = parseInt(args[++i], 10);
     else if (arg === '--period' && args[i + 1]) opts.period = args[++i];
-    else if (!opts.mode && !arg.startsWith('--')) opts.mode = arg; // positional mode
+    else if (!opts.mode && !arg.startsWith('--')) opts.mode = arg;
   }
 
   return opts;
@@ -592,24 +645,11 @@ function parseArgs() {
 
 const opts = parseArgs();
 
-// Handle help and schema refresh immediately
-if (opts.mode === 'help' || (!opts.mode && !opts.refreshSchema)) {
+if (opts.mode === 'help' || !opts.mode) {
   console.log(JSON.stringify(modeHelp(), null, 2));
   process.exit(0);
 }
 
-if (opts.refreshSchema) {
-  try {
-    const schema = await refreshSchema();
-    console.log(JSON.stringify({ ok: true, message: 'Schema refreshed', meta: schema.meta }, null, 2));
-  } catch (err) {
-    console.error(JSON.stringify({ ok: false, error: String(err.message || err) }, null, 2));
-    process.exit(1);
-  }
-  process.exit(0);
-}
-
-// Validate mode
 const validModes = ['snapshot', 'stale', 'forecast', 'health', 'win-loss', 'hygiene', 'movements'];
 const modeMatch = fuzzyMatch(opts.mode, validModes);
 if (!modeMatch) {
@@ -622,35 +662,31 @@ if (!modeMatch) {
 opts.mode = modeMatch.match;
 
 try {
-  // Load schema for fuzzy matching (used by stage/exclude filters)
-  const schema = await loadSchema();
-  const stageNames = schema.stageOptions.map(s => s.title);
+  // Load schema from env var (set by Track server)
+  const schema = loadAttioSchema();
+  const stageNames = getStageNames(schema);
+  const hasSchema = stageNames.length > 0;
 
-  // Resolve stage filter via fuzzy match
-  if (opts.stage) {
-    const match = fuzzyMatch(opts.stage, stageNames);
-    if (!match) {
-      console.error(JSON.stringify({
-        ok: false,
-        error: `No stage matching "${opts.stage}". Available: ${stageNames.join(', ')}`,
-      }, null, 2));
-      process.exit(1);
-    }
-    opts.stage = match.match;
+  if (!hasSchema) {
+    process.stderr.write('Warning: ATTIO_SCHEMA not set — using raw matching without fuzzy resolution\n');
   }
 
-  // Resolve exclude filters via fuzzy match
-  if (opts.exclude.length > 0) {
-    const resolved = fuzzyMatchMultiple(opts.exclude, stageNames);
-    const errors = resolved.filter(r => !r.match);
-    if (errors.length > 0) {
+  // Resolve stage filter
+  if (opts.stage) {
+    const resolved = resolveStage(opts.stage, stageNames);
+    if (!resolved) {
       console.error(JSON.stringify({
         ok: false,
-        error: `Could not match exclude values: ${errors.map(e => e.error).join('; ')}`,
+        error: `No stage matching "${opts.stage}".${hasSchema ? ` Available: ${stageNames.join(', ')}` : ' Set ATTIO_SCHEMA for fuzzy matching.'}`,
       }, null, 2));
       process.exit(1);
     }
-    opts.exclude = resolved.map(r => r.match);
+    opts.stage = resolved;
+  }
+
+  // Resolve exclude filters
+  if (opts.exclude.length > 0) {
+    opts.exclude = resolveStages(opts.exclude, stageNames);
   }
 
   // Fetch data
@@ -664,11 +700,21 @@ try {
   // Apply stage filter to all modes
   let filteredDeals = deals;
   if (opts.stage) {
-    filteredDeals = filteredDeals.filter(d => d.stage === opts.stage);
+    if (hasSchema) {
+      // Exact match from fuzzy resolution
+      filteredDeals = filteredDeals.filter(d => d.stage === opts.stage);
+    } else {
+      // Fallback: case-insensitive substring
+      const target = opts.stage.toLowerCase();
+      filteredDeals = filteredDeals.filter(d => d.stage.toLowerCase().includes(target));
+    }
   }
   if (opts.exclude.length > 0) {
-    const excludeSet = new Set(opts.exclude);
-    filteredDeals = filteredDeals.filter(d => !excludeSet.has(d.stage));
+    const excludeSet = new Set(hasSchema ? opts.exclude : opts.exclude.map(e => e.toLowerCase()));
+    filteredDeals = filteredDeals.filter(d => {
+      const stage = hasSchema ? d.stage : d.stage.toLowerCase();
+      return !excludeSet.has(stage);
+    });
   }
 
   // Run the selected mode

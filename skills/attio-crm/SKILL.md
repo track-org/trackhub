@@ -41,16 +41,26 @@ The main tool is `pipeline-query.mjs` — a unified script with 7 query modes, f
 
 This skill uses the `attio` connector, which provides `ATTIO_API_KEY` and `ATTIO_API_BASE_URL` as environment variables to scripts.
 
-## Local Data Convention
+### Schema for Fuzzy Matching
 
-Workspace-specific schema and reference data lives at `workspace/data/attio-crm/`:
+The unified `pipeline-query.mjs` script uses the `ATTIO_SCHEMA` environment variable for fuzzy matching stage names and other filter values. This is provided by the Track server — the skill does **not** fetch or cache schema itself.
 
-- `deals-object.json` — the deals object definition (attribute metadata)
-- `deals-attributes.json` — all attribute definitions for the deals object
-- `deals-stage-options.json` — discovered stage names with IDs (auto-cached)
-- `deals-company-stage-options.json` — discovered company stage values (auto-cached)
+**Expected format:**
+```json
+{
+  "stages": [
+    { "title": "Lead", "id": "...", "is_archived": false },
+    { "title": "Live", "id": "...", "is_archived": false },
+    { "title": "Won 🎉", "id": "...", "is_archived": false },
+    { "title": "Disqualified", "id": "...", "is_archived": false }
+  ],
+  "companyStages": [
+    { "title": "Seed", "id": "...", "is_archived": false }
+  ]
+}
+```
 
-These files are **not** in trackhub — they contain workspace-specific schema and should not be shared.
+If `ATTIO_SCHEMA` is **not set**, the script falls back to raw case-insensitive substring matching and prints a warning to stderr.
 
 ## Quick Reference — Intent → Command
 
@@ -83,7 +93,6 @@ node scripts/pipeline-query.mjs --mode <mode> [options]
 | `--days=N`            | Days threshold for stale/movements modes         |
 | `--period=week\|month\|quarter\|year` | Period for forecast/win-loss modes        |
 | `--json`              | Output structured JSON                            |
-| `--refresh-schema`    | Force refresh the schema cache from API          |
 | `--help`              | Show all modes, flags, and intent mapping (JSON) |
 
 Examples:
