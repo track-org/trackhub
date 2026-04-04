@@ -38,14 +38,15 @@ export function parseArgs(argv, opts = {}) {
     result[key] = val;
   }
 
-  // Build reverse alias map
+  // Build reverse alias map (short → long only, not bidirectional)
   const aliasOf = {};
   for (const [short, long] of Object.entries(alias)) {
-    aliasOf[long] = short;
     aliasOf[short] = long;
   }
 
   function resolveKey(key) {
+    // If the key itself is a known boolean/string/default, use it directly
+    if (boolKeys.includes(key) || strKeys.includes(key) || key in defaults) return key;
     return aliasOf[key] || key;
   }
 
