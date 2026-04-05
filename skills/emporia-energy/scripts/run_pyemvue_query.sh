@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-VENV="/home/delads/.openclaw/workspace/.venv-emporia"
+# Resolve paths relative to this script's location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+WORKSPACE="${SKILL_DATA_DIR:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
+VENV="$WORKSPACE/.venv-emporia"
 PY="$VENV/bin/python"
-SCRIPT="/home/delads/.openclaw/workspace/skills/emporia-energy/scripts/query_emporia.py"
+SCRIPT="$SCRIPT_DIR/query_emporia.py"
 if [[ ! -x "$PY" ]]; then
   echo "Missing PyEmVue virtualenv at $VENV" >&2
   echo "Create it and install pyemvue first." >&2

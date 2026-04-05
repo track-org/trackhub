@@ -38,7 +38,7 @@ SCALE_MAP = {
 
 def parse_args():
     p = argparse.ArgumentParser(description="Query Emporia energy usage as JSON")
-    p.add_argument("--env-file", default="/home/delads/.openclaw/workspace/.env")
+    p.add_argument("--env-file", default=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
     p.add_argument("--username", default=os.getenv("EMPORIA_USERNAME") or os.getenv("EMPORIA_ACCOUNT"))
     p.add_argument("--password", default=os.getenv("EMPORIA_PASSWORD"))
     p.add_argument("--token-file", default=os.getenv("EMPORIA_TOKEN_FILE", "~/.config/emporia/keys.json"))
