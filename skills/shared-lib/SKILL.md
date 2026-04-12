@@ -106,6 +106,10 @@ import { parseArgs } from '../../shared-lib/scripts/lib/args.mjs';
 - **Testable standalone** — every module runs `node <module>.mjs` for a quick smoke test
 - **Small and focused** — each module does one thing well
 
+## Arm64-Safe Scripting
+
+TrackHub runs on Raspberry Pi arm64. Node.js is more memory-sensitive there. Before writing scripts, read [`references/arm64-scripting.md`](references/arm64-scripting.md) for patterns that prevent OOM crashes. Key rules: use ES5 CJS for data-processing scripts, avoid template literals with interpolation in hot paths, stream instead of buffer, and set a memory ceiling.
+
 ## Module Map
 
 | Module | Exports | Key Functions |
