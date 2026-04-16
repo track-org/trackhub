@@ -6,11 +6,12 @@ Reads jobs.json and produces a formatted summary of job status,
 recent runs, delivery state, and any problems.
 
 Usage:
-  python3 cron-dashboard.py [--json] [--problems-only]
+  python3 cron-dashboard.py [--json] [--problems-only] [--deps]
 
 Options:
   --json           Output structured JSON instead of formatted text
   --problems-only  Only show jobs with errors, warnings, or issues
+  --deps           Show API dependency map (which jobs depend on which services)
 
 Exit codes:
   0 — all jobs healthy
@@ -22,9 +23,9 @@ import sys
 import os
 from datetime import datetime, timezone
 
-# Default paths to check
+# Default paths to check — supports OPENCLAW_STATE_DIR override
 DEFAULT_PATHS = [
-    os.path.expanduser("~/.openclaw/cron/jobs.json"),
+    os.path.expanduser(os.environ.get("OPENCLAW_STATE_DIR", "~/.openclaw") + "/cron/jobs.json"),
 ]
 
 
@@ -106,6 +107,64 @@ def delivery_label(delivery: dict | None, state: dict) -> str:
         return f"{channel} → {to} ⚠️ {del_status}"
 
 
+# Known API service signatures — lowercase patterns to match in payload text
+# Maps service name to list of keyword patterns
+API_SERVICE_PATTERNS = {
+    "gmail": ["gmail", "google_oauth", "gmail_access_token", "check_gmail"],
+    "slack": ["slack", "slack_bot_token", "channel:", "conversations.history"],
+    "attio": ["attio", "pipeline-query", "attio_api_key"],
+    "supabase": ["supabase", "supabase_url", "supabase_anon_key"],
+    "solis": ["solis", "solis_", "soliscloud", "solar export"],
+    "emporia": ["emporia", "pyemvue", "emvue", "vue_energy"],
+    "openai": ["openai", "gpt-4", "openai_api_key"],
+    "open-meteo": ["open-meteo", "openmeteo", "wttr.in"],
+}
+
+
+def detect_api_deps(job: dict) -> list[str]:
+    """Scan a job's payload text for references to known API services."""
+    payload = job.get("payload", {})
+    # Get all text from payload fields
+    text_parts = []
+    for key, val in payload.items():
+        if isinstance(val, str):
+            text_parts.append(val)
+        elif isinstance(val, dict):
+            for k, v in val.items():
+                if isinstance(v, str):
+                    text_parts.append(v)
+    combined = " ".join(text_parts).lower()
+
+    deps = []
+    for service, patterns in API_SERVICE_PATTERNS.items():
+        for pat in patterns:
+            if pat.lower() in combined:
+                deps.append(service)
+                break
+    return sorted(deps)
+
+
+def deps_map(results: list[dict], all_results_raw: list[dict] | None = None) -> str:
+    """Build a service→jobs dependency map."""
+    if all_results_raw is None:
+        all_results_raw = results
+    service_jobs: dict[str, list[str]] = {}
+    for r in all_results_raw:
+        for dep in r.get("api_deps", []):
+            service_jobs.setdefault(dep, []).append(r["name"])
+    if not service_jobs:
+        return "📡 No API dependencies detected in any job payloads."
+
+    lines = ["📡 API Dependency Map", ""]
+    for service in sorted(service_jobs):
+        jobs = service_jobs[service]
+        lines.append(f"  **{service}** ({len(jobs)} job{'s' if len(jobs) != 1 else ''})")
+        for j in jobs:
+            lines.append(f"    • {j}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 def analyze_job(job: dict) -> dict:
     """Analyze a single job for health issues."""
     issues = []
@@ -150,6 +209,7 @@ def analyze_job(job: dict) -> dict:
         "consecutive_errors": errors,
         "issues": issues,
         "healthy": len(issues) == 0,
+        "api_deps": detect_api_deps(job),
     }
 
 
@@ -181,6 +241,8 @@ def format_text(results: list[dict], problems_only: bool = False) -> str:
         lines.append(f"   Schedule: {r['schedule']}")
         lines.append(f"   Last run: {r['last_run']} — {r['last_status']} ({r['duration']})")
         lines.append(f"   Delivery: {r['delivery']}")
+        if r.get("api_deps"):
+            lines.append(f"   API deps: {', '.join(r['api_deps'])}")
         if r["issues"]:
             lines.append(f"   Issues: {', '.join(r['issues'])}")
         lines.append("")
@@ -192,6 +254,7 @@ def main():
     args = sys.argv[1:]
     as_json = "--json" in args
     problems_only = "--problems-only" in args
+    show_deps = "--deps" in args
 
     # Find and load jobs
     data = None
@@ -214,7 +277,10 @@ def main():
     # Sort: problems first, then by name
     results.sort(key=lambda r: (r["healthy"], r["name"].lower()))
 
-    if as_json:
+    if show_deps:
+        print(deps_map(results))
+        sys.exit(0)
+    elif as_json:
         print(json.dumps(results, indent=2))
     else:
         print(format_text(results, problems_only))

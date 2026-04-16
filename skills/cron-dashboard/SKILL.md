@@ -9,7 +9,7 @@ Single-command health check for all OpenClaw cron jobs.
 
 ## Overview
 
-Reads `~/.openclaw/cron/jobs.json` and produces a formatted summary showing every job's schedule, last run status, duration, delivery state, and any problems. Useful for heartbeat checks, proactive monitoring, and quick debugging.
+Reads `$OPENCLAW_STATE_DIR/cron/jobs.json` (default `~/.openclaw/cron/jobs.json`) and produces a formatted summary showing every job's schedule, last run status, duration, delivery state, and any problems. Useful for heartbeat checks, proactive monitoring, and quick debugging.
 
 ## Usage
 
@@ -17,12 +17,14 @@ Reads `~/.openclaw/cron/jobs.json` and produces a formatted summary showing ever
 python3 {baseDir}/scripts/cron-dashboard.py            # Full dashboard
 python3 {baseDir}/scripts/cron-dashboard.py --json      # JSON output
 python3 {baseDir}/scripts/cron-dashboard.py --problems-only  # Only show issues
+python3 {baseDir}/scripts/cron-dashboard.py --deps      # API dependency map
 ```
 
 ### Finding the script at runtime
 
 ```bash
-SKILL_DIR=$(find /home/delads/.openclaw/workspace/trackhub/skills/cron-dashboard -maxdepth 0 -type d 2>/dev/null)
+SKILL_DIR=$(find $OPENCLAW_STATE_DIR/workspace/trackhub/skills/cron-dashboard -maxdepth 0 -type d 2>/dev/null \
+  || find ~/.openclaw/workspace/trackhub/skills/cron-dashboard -maxdepth 0 -type d 2>/dev/null)
 python3 $SKILL_DIR/scripts/cron-dashboard.py
 ```
 
@@ -38,6 +40,7 @@ python3 $SKILL_DIR/scripts/cron-dashboard.py
    Schedule: 0 7 * * * (Europe/Dublin)
    Last run: 17h ago — ok (14.4s)
    Delivery: slack → channel:C0A8BNZQ1DK ✅
+   API deps: attio, slack
 ```
 
 ### Problems detected
@@ -57,6 +60,27 @@ python3 $SKILL_DIR/scripts/cron-dashboard.py
 - `session_target`, `last_run`, `last_status`, `duration`
 - `delivery`, `consecutive_errors`
 - `issues` (array of strings), `healthy` (boolean)
+- `api_deps` (array of detected API service names)
+
+### API dependency map (--deps)
+
+Shows which external services each cron job depends on, grouped by service. Useful when a credential breaks to immediately see which jobs are affected.
+
+```
+📡 API Dependency Map
+
+  **gmail** (2 jobs)
+    • Daily Gmail digest to WhatsApp
+    • Nightly: wire-preflight skill notification
+
+  **attio** (2 jobs)
+    • Attio stage changes to #product
+    • Nightly: wire-preflight skill notification
+```
+
+Detected services: gmail, slack, attio, supabase, solis, emporia, openai, open-meteo.
+
+Detection scans job payload text for service-specific keywords (script names, env vars, API references). Not exhaustive — add patterns to `API_SERVICE_PATTERNS` in the script for new services.
 
 ### Exit codes
 
