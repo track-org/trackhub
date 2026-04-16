@@ -5,7 +5,8 @@ description: >
   cron task. If credentials are broken, it bails out gracefully with an alert instead
   of wasting LLM tokens on a doomed task. Use when creating or editing cron jobs that
   depend on external APIs (Gmail, Slack, Attio, Supabase, etc.), or when a cron job
-  failed silently due to expired credentials.
+  failed silently due to expired credentials. Also includes wire-preflight.mjs for
+  auto-detecting API dependencies and injecting preflight checks into existing cron jobs.
 ---
 
 # Cron Preflight 🛡️
@@ -125,3 +126,41 @@ If any failures:
 - ✅ Pair with graceful-degradation for alert management
 - ✅ Use `--fail-only` to keep output clean for LLM parsing
 - ✅ Use `--json` for structured output the agent can easily evaluate
+
+## Auto-Wire Script: `wire-preflight.mjs`
+
+`scripts/wire-preflight.mjs` — automatically detects which APIs a cron job uses and injects credential-health preflight checks into its payload. No more manually editing payloads.
+
+### Usage
+
+```bash
+# Wire a specific job
+node scripts/wire-preflight.mjs <job-id-or-name>
+
+# Scan all enabled jobs and wire any that need it
+node scripts/wire-preflight.mjs --all
+
+# Preview without making changes
+node scripts/wire-preflight.mjs --all --dry-run
+```
+
+### How It Works
+
+1. Reads all cron jobs via `openclaw cron list --json`
+2. Scans each job's payload text for API-related keywords (gmail, attio, supabase, openai, slack)
+3. Ignores negative mentions (e.g. "Do not post to Slack") to avoid false positives
+4. Skips jobs that already have preflight checks injected
+5. Injects a preflight step at the top of the payload with the detected services
+6. Updates the job via `openclaw cron edit`, using `--system-event` or `--message` based on payload kind
+
+### Detection Rules
+
+| Service | Detected by keywords |
+|---|---|
+| Gmail | `check_gmail`, `gmail-checker`, `Gmail digest`, `Gmail` |
+| Attio | `attio`, `Attio`, `ATTIO`, `pipeline-query` |
+| Supabase | `supabase`, `Supabase`, `SUPABASE` |
+| OpenAI | `openai`, `OpenAI`, `OPENAI` |
+| Slack | `SLACK_BOT_TOKEN`, `slack tool`, `slack reactions` |
+
+Jobs mentioning Slack only in delivery context (e.g. "format for Slack") are correctly skipped.
