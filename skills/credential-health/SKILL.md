@@ -19,7 +19,8 @@ A cron job that sends a Gmail digest is useless if the OAuth token expired yeste
 
 | Check | Method | What it detects |
 |---|---|---|
-| **gmail** | OAuth2 token introspection via Google userinfo endpoint | Expired/revoked OAuth tokens |
+| **gmail** | OAuth2 token introspection via Google userinfo endpoint | Expired/revoked OAuth tokens (env var) |
+| **gmail-file** | Reads OAuth credentials JSON file, validates access_token or refresh_token | Expired/revoked tokens stored in credential files |
 | **slack** | `auth.test` API call | Invalid bot tokens |
 | **attio** | GET to `/objects` with API key header | Invalid or missing API keys |
 | **supabase** | GET to `/rest/v1/` with anon key | Invalid project URLs or anon keys |
@@ -34,6 +35,12 @@ node scripts/credential-health.cjs
 
 # Check specific services
 node scripts/credential-health.cjs --check gmail slack attio
+
+# Check Gmail using credentials file (refresh_token-based)
+node scripts/credential-health.cjs --check gmail-file
+
+# Check Gmail using a custom credentials file path
+node scripts/credential-health.cjs --check gmail-file --token-file /path/to/creds.json
 
 # JSON output (for cron payloads)
 node scripts/credential-health.cjs --json
@@ -55,6 +62,7 @@ Credentials are read from environment variables. The script does NOT read `.env`
 | Service | Env var(s) |
 |---|---|
 | Gmail | `GMAIL_ACCESS_TOKEN` (or `GOOGLE_OAUTH_TOKEN`) |
+| Gmail (file) | `~/.openclaw/credentials/gmail.json` (or `--token-file path`) |
 | Slack | `SLACK_BOT_TOKEN` |
 | Attio | `ATTIO_API_KEY` |
 | Supabase | `SUPABASE_URL`, `SUPABASE_ANON_KEY` |

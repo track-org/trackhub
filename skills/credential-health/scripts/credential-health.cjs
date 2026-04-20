@@ -6,13 +6,15 @@
  * Zero external dependencies. ES5 CJS for arm64 memory safety.
  *
  * Usage:
- *   node credential-health.cjs [--check gmail slack ...] [--json] [--fail-only] [--timeout N] [--generic "Name:URL:HeaderName:$ENV_VAR"]
+ *   node credential-health.cjs [--check gmail slack ...] [--json] [--fail-only] [--timeout N] [--generic "Name:URL:HeaderName:$ENV_VAR"] [--token-file path]
  */
 
 'use strict';
 
 var https = require('https');
 var http = require('http');
+var fs = require('fs');
+var path = require('path');
 
 // ─── Minimal arg parser ──────────────────────────────────────────────
 
@@ -60,6 +62,11 @@ function parseArgs(argv) {
         result.generic.push(argv[i]);
         i++;
       }
+      continue;
+    }
+    if (arg === '--token-file') {
+      result.tokenFile = argv[i + 1] || '';
+      i += 2;
       continue;
     }
     result._.push(arg);
@@ -142,6 +149,90 @@ function checkGmail(timeoutMs) {
   }).catch(function (err) {
     return { status: 'fail', detail: err.message };
   });
+}
+
+function checkGmailFile(filePath, timeoutMs) {
+  // Read a Google OAuth credentials JSON file and validate the token
+  // Supports files with access_token field, or refresh_token + client_id + client_secret
+  var resolvedPath = filePath || '~/.openclaw/credentials/gmail.json';
+  // Handle ~ expansion manually for ES5 compat
+  if (resolvedPath.charAt(0) === '~') {
+    resolvedPath = (process.env.HOME || '/root') + resolvedPath.slice(1);
+  }
+  resolvedPath = path.resolve(resolvedPath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    return Promise.resolve({ status: 'skip', detail: 'Credentials file not found: ' + resolvedPath });
+  }
+
+  try {
+    var data = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+  } catch (e) {
+    return Promise.resolve({ status: 'fail', detail: 'Could not parse credentials file: ' + e.message });
+  }
+
+  // If we have an access_token, validate it directly
+  if (data.access_token) {
+    return httpRequest('https://www.googleapis.com/oauth2/v3/userinfo', {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + data.access_token }
+    }, timeoutMs).then(function (res) {
+      if (res.status === 200) {
+        try {
+          var info = JSON.parse(res.body);
+          return { status: 'ok', detail: 'Token valid (user: ' + (info.email || info.sub || 'unknown') + ', via file)' };
+        } catch (e) {
+          return { status: 'ok', detail: 'Token valid (via file)' };
+        }
+      }
+      if (res.status === 401) {
+        return { status: 'fail', detail: 'Token expired or revoked (401) — file: ' + resolvedPath };
+      }
+      return { status: 'fail', detail: 'Unexpected status ' + res.status };
+    }).catch(function (err) {
+      return { status: 'fail', detail: err.message };
+    });
+  }
+
+  // If we have a refresh_token, we can try to refresh it (requires client_id + client_secret)
+  if (data.refresh_token && data.client_id && data.client_secret) {
+    var body = 'grant_type=refresh_token&client_id=' + encodeURIComponent(data.client_id) +
+      '&client_secret=' + encodeURIComponent(data.client_secret) +
+      '&refresh_token=' + encodeURIComponent(data.refresh_token);
+    return httpRequest('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    }, timeoutMs).then(function (res) {
+      if (res.status === 200) {
+        try {
+          var tokenData = JSON.parse(res.body);
+          var expiresIn = tokenData.expires_in || 'unknown';
+          return { status: 'ok', detail: 'Refresh token valid (new access_token obtained, expires in ' + expiresIn + 's)' };
+        } catch (e) {
+          return { status: 'ok', detail: 'Refresh token valid (via file)' };
+        }
+      }
+      if (res.status === 400 || res.status === 401) {
+        try {
+          var errData = JSON.parse(res.body);
+          return { status: 'fail', detail: 'Refresh token invalid or revoked: ' + (errData.error_description || errData.error || res.status) };
+        } catch (e) {
+          return { status: 'fail', detail: 'Refresh token invalid or revoked (' + res.status + ')' };
+        }
+      }
+      return { status: 'fail', detail: 'Unexpected refresh status ' + res.status };
+    }).catch(function (err) {
+      return { status: 'fail', detail: err.message };
+    });
+  }
+
+  // Has refresh_token but missing client credentials
+  if (data.refresh_token) {
+    return Promise.resolve({ status: 'skip', detail: 'File has refresh_token but no client_id/client_secret — cannot validate' });
+  }
+
+  return Promise.resolve({ status: 'skip', detail: 'No access_token or refresh_token found in credentials file' });
 }
 
 function checkSlack(timeoutMs) {
@@ -305,8 +396,9 @@ function main() {
     console.log('Usage: node credential-health.cjs [options]');
     console.log('');
     console.log('Options:');
-    console.log('  --check <services>    Check specific services (gmail, slack, attio, supabase, openai)');
+    console.log('  --check <services>    Check specific services (gmail, gmail-file, slack, attio, supabase, openai)');
     console.log('  --generic <spec>      Generic check: "Name:URL:HeaderName:$ENV_VAR"');
+    console.log('  --token-file <path>   Credentials file path for gmail-file check (default: ~/.openclaw/credentials/gmail.json)');
     console.log('  --json                Output JSON');
     console.log('  --fail-only           Only show failures');
     console.log('  --timeout <seconds>   Request timeout (default: 5)');
@@ -316,6 +408,7 @@ function main() {
 
   var serviceNames = {
     gmail: 'Gmail OAuth',
+    'gmail-file': 'Gmail OAuth (file)',
     slack: 'Slack Bot',
     attio: 'Attio API',
     supabase: 'Supabase',
@@ -324,6 +417,7 @@ function main() {
 
   var checkers = {
     gmail: checkGmail,
+    'gmail-file': function (timeoutMs) { return checkGmailFile(args.tokenFile || '~/.openclaw/credentials/gmail.json', timeoutMs); },
     slack: checkSlack,
     attio: checkAttio,
     supabase: checkSupabase,
