@@ -11,7 +11,7 @@ memory-paths-writes: []
 memory-paths-reads: []
 available-scripts:
   - name: heartbeat-state
-    description: Read, update, and query heartbeat task state from a JSON file
+    description: Read, update, and query heartbeat task state from a JSON file. Supports credential-aware preflight gating, batch operations, and one-shot health dashboards.
 ---
 
 # Heartbeat Checklist
@@ -93,6 +93,68 @@ node scripts/heartbeat-state.mjs overdue [--file <path>]
 ```
 
 Returns JSON array of tasks past their `--min-interval`.
+
+### Batch-check multiple tasks
+
+```sh
+# JSON input
+node scripts/heartbeat-state.mjs batch-check --json '{"tasks":{"email":{"status":"ok","summary":"3 unread"},"slack":{"status":"warn"}}}'
+
+# Simple colon-pairs
+node scripts/heartbeat-state.mjs batch-check email:ok:3 unread slack:warn:rate limited
+```
+
+Record multiple task results in a single call. Useful when an agent checks several things in one heartbeat turn.
+
+### Credential-aware preflight
+
+```sh
+node scripts/heartbeat-state.mjs preflight <task> --creds <svc1,svc2> [--min-interval N] [--after HH:MM] [--window-start HH:MM --window-end HH:MM]
+```
+
+Combines schedule logic (same flags as `should-check`) with credential health checks. Exit 0 = proceed, exit 1 = skip. Automatically records skipped tasks in state.
+
+**Example:**
+```sh
+# Only proceed with email check if it's business hours AND gmail creds are ok
+node scripts/heartbeat-state.mjs preflight email --creds gmail --min-interval 10800 --after 08:00 --before 23:00
+```
+
+**Output (JSON):**
+```json
+{
+  "task": "email",
+  "scheduleDue": true,
+  "credentialsOk": true,
+  "credResults": [...],
+  "proceed": true
+}
+```
+
+### One-shot health dashboard
+
+```sh
+node scripts/heartbeat-state.mjs health-summary [--creds gmail,slack,attio] [--timezone tz]
+```
+
+Returns a JSON snapshot combining:
+- **Time context**: local time, timezone, day of week, quiet hours status
+- **Recent tasks**: checks recorded in the last 24h with relative timestamps
+- **Stale tasks**: tasks not checked in >24h
+- **Credential health**: results from credential-health checks (if `--creds` specified)
+
+Use this at the start of each heartbeat to get a full picture in one call.
+
+**Example output:**
+```json
+{
+  "timestamp": 1776812665870,
+  "time": { "local": "09:15", "timezone": "Europe/Dublin", "dayOfWeek": "Tuesday", "quietHours": false },
+  "tasks": { "recent": {...}, "stale": [], "total": 5 },
+  "credentials": { "available": true, "results": [...], "summary": { "ok": 2, "fail": 0, "skip": 1 } },
+  "quietHours": false
+}
+```
 
 ### Reset a task
 
