@@ -70,11 +70,12 @@ Match the pre-flight check to what the cron job actually uses:
 
 | Cron job | Pre-flight `--check` |
 |---|---|
-| Gmail digest | `gmail` |
+| Gmail digest (env var token) | `gmail` |
+| Gmail digest (file-based token) | `gmail-file` |
 | Slack notifications | `slack` |
 | Attio pipeline reports | `attio` |
 | Supabase queries | `supabase` |
-| Multiple services | `gmail slack attio` |
+| Multiple services | `gmail-file slack attio` |
 
 ## Pairing with Graceful Degradation
 
@@ -157,10 +158,13 @@ node scripts/wire-preflight.mjs --all --dry-run
 
 | Service | Detected by keywords |
 |---|---|
-| Gmail | `check_gmail`, `gmail-checker`, `Gmail digest`, `Gmail` |
+| Gmail (env var) | `GMAIL_ACCESS_TOKEN`, `GOOGLE_OAUTH_TOKEN` |
+| Gmail (file-based) | `check_gmail`, `gmail-checker`, `Gmail digest`, `gmail.json`, `credentials/gmail` |
 | Attio | `attio`, `Attio`, `ATTIO`, `pipeline-query` |
 | Supabase | `supabase`, `Supabase`, `SUPABASE` |
 | OpenAI | `openai`, `OpenAI`, `OPENAI` |
 | Slack | `SLACK_BOT_TOKEN`, `slack tool`, `slack reactions` |
 
 Jobs mentioning Slack only in delivery context (e.g. "format for Slack") are correctly skipped.
+
+**Note:** `gmail` (env var) and `gmail-file` are separate checks. Most cron jobs using the `gmail-checker` script store tokens in `~/.openclaw/credentials/gmail.json`, so `gmail-file` is the correct preflight. The `gmail` check only applies when the token is provided via `GMAIL_ACCESS_TOKEN` or `GOOGLE_OAUTH_TOKEN` environment variables.

@@ -26,11 +26,12 @@ const CREDENTIAL_HEALTH_SCRIPT =
 // Keyword → service mapping: if payload text contains any keyword for a service,
 // we inject a preflight check for it.
 const SERVICE_PATTERNS = {
-  gmail:    ['check_gmail', 'gmail-checker', 'Gmail digest', 'Gmail'],
-  slack:    ['SLACK_BOT_TOKEN', 'slack tool', 'slack reactions'],
-  attio:    ['attio', 'Attio', 'ATTIO', 'pipeline-query'],
-  supabase: ['supabase', 'Supabase', 'SUPABASE'],
-  openai:   ['openai', 'OpenAI', 'OPENAI'],
+  gmail:       ['GMAIL_ACCESS_TOKEN', 'GOOGLE_OAUTH_TOKEN'],
+  'gmail-file': ['check_gmail', 'gmail-checker', 'Gmail digest', 'gmail.json', 'credentials/gmail'],
+  slack:       ['SLACK_BOT_TOKEN', 'slack tool', 'slack reactions'],
+  attio:       ['attio', 'Attio', 'ATTIO', 'pipeline-query'],
+  supabase:    ['supabase', 'Supabase', 'SUPABASE'],
+  openai:      ['openai', 'OpenAI', 'OPENAI'],
 };
 
 // Negative patterns — if payload contains these, the service is mentioned
