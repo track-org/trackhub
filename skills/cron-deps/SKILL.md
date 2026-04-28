@@ -45,7 +45,9 @@ node cron-deps.cjs --resource credentials
 node cron-deps.cjs --resource channels
 node cron-deps.cjs --resource skills
 node cron-deps.cjs --resource apis
-node cron-deps.cjs --resource session-targets
+
+# Mermaid dependency graph (paste into Slack, Notion, GitHub, etc.)
+node cron-deps.cjs --mermaid
 
 # Machine-readable output
 node cron-deps.cjs --json
@@ -57,6 +59,7 @@ node cron-deps.cjs --json
 |------|---------|-------------|
 | `--blast-radius <resource>` | _(none)_ | Show jobs affected if a resource fails. Fuzzy-matches against credentials, APIs, skills, channels, and job names |
 | `--resource <type>` | `all` | Group jobs by: `credentials`, `channels`, `skills`, `apis`, `session-targets`, or `all` (full report) |
+| `--mermaid` | false | Output a Mermaid dependency graph showing jobs, credentials, APIs, channels, and skills as visual nodes with edges |
 | `--json` | false | Output structured JSON instead of human-readable report |
 | `--help`, `-h` | | Show usage |
 
@@ -126,6 +129,24 @@ $ node cron-deps.cjs --json | jq '.resourceMap.credentials'
   "supabase": ["Daily Leaving Cert note"]
 }
 ```
+
+### Mermaid dependency graph
+
+```bash
+$ node cron-deps.cjs --mermaid
+graph TD
+    subgraph cron["📅 Cron Jobs"]
+    job_abc["Solar export WhatsApp nudge"]
+    job_def["Attio stage changes to #product"]
+    end
+    ...
+```
+
+Paste the output into any Mermaid renderer (Slack with Mermaid support, Notion, GitHub markdown, mermaid.live, etc.) to get a visual dependency map. Features:
+
+- **Subgraphs** group nodes by type: cron jobs, credentials, APIs, channels, skills
+- **Edge styles** convey meaning: solid for direct dependency, dashed for preflight check, thick for delivery, dotted for skill usage
+- **Color-coded** nodes: amber for credentials, blue for APIs, green for channels, purple for skills, grey for disabled jobs
 
 ## Limitations
 

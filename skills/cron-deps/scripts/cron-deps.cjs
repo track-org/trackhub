@@ -16,6 +16,7 @@
  *   node cron-deps.cjs --resource channels      # Group by delivery channels
  *   node cron-deps.cjs --resource skills        # Group by skill scripts used
  *   node cron-deps.cjs --resource all           # Full dependency map (default)
+ *   node cron-deps.cjs --mermaid                # Output Mermaid dependency graph
  */
 
 'use strict';
@@ -54,6 +55,7 @@ Options:
   --json            Output as JSON
   --blast-radius <resource>  Show jobs affected if a resource fails
   --resource <type>  Group by: credentials, channels, skills, session-targets, all
+  --mermaid         Output as Mermaid dependency graph
   --help, -h        Show this help`);
   process.exit(0);
 }
@@ -420,6 +422,142 @@ function formatResourceGroup(resourceMap, type) {
   return lines.join('\n');
 }
 
+// ── Mermaid graph formatter ───────────────────────────────────────────
+function sanitizeMermaidId(str) {
+  // Mermaid node IDs: alphanumeric, hyphens, underscores only
+  return str.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+}
+
+function formatMermaid(jobs, resourceMap, jobDeps) {
+  const lines = [];
+  lines.push('graph TD');
+
+  // Group nodes by category using subgraphs
+  const cronNodes = [];
+  const credNodes = [];
+  const apiNodes = [];
+  const channelNodes = [];
+  const skillNodes = [];
+  const edges = [];
+
+  // Collect all unique resources
+  const seenCreds = new Set();
+  const seenApis = new Set();
+  const seenChannels = new Set();
+  const seenSkills = new Set();
+
+  for (const [id, { job, deps }] of jobDeps) {
+    const jobId = sanitizeMermaidId(`job_${job.id}`);
+    const label = job.name.length > 35 ? job.name.slice(0, 32) + '...' : job.name;
+    const status = job.enabled ? '' : ' ⛔';
+    cronNodes.push(`    ${jobId}["${label}${status}"]`);
+
+    // Credential edges
+    for (const cred of deps.credentials) {
+      const credId = sanitizeMermaidId(`cred_${cred}`);
+      if (!seenCreds.has(cred)) {
+        seenCreds.add(cred);
+        credNodes.push(`    ${credId}(("🔑 ${cred}"))`);
+      }
+      const hasPreflight = deps.preflightChecks.has(cred.toLowerCase());
+      const lineStyle = hasPreflight ? '-.->|preflight|' : '---';
+      edges.push(`    ${jobId} ${lineStyle} ${credId}`);
+    }
+
+    // API edges
+    for (const api of deps.apis) {
+      const apiId = sanitizeMermaidId(`api_${api}`);
+      if (!seenApis.has(api)) {
+        seenApis.add(api);
+        apiNodes.push(`    ${apiId}["🌐 ${api}"]`);
+      }
+      edges.push(`    ${jobId} --> ${apiId}`);
+    }
+
+    // Channel edges
+    if (deps.deliveryChannel) {
+      const chId = sanitizeMermaidId(`ch_${deps.deliveryChannel}`);
+      if (!seenChannels.has(deps.deliveryChannel)) {
+        seenChannels.add(deps.deliveryChannel);
+        channelNodes.push(`    ${chId}["📡 ${deps.deliveryChannel}"]`);
+      }
+      edges.push(`    ${jobId} ==>|deliver| ${chId}`);
+    }
+
+    // Skill edges
+    for (const skill of deps.skills) {
+      const skillName = skill.split('/')[0];
+      const skillId = sanitizeMermaidId(`skill_${skillName}`);
+      if (!seenSkills.has(skillName)) {
+        seenSkills.add(skillName);
+        skillNodes.push(`    ${skillId}["🛠️ ${skillName}"]`);
+      }
+      edges.push(`    ${jobId} -.->|uses| ${skillId}`);
+    }
+  }
+
+  // Render subgraphs
+  if (cronNodes.length > 0) {
+    lines.push('    subgraph cron["📅 Cron Jobs"]');
+    lines.push(cronNodes.join('\n'));
+    lines.push('    end');
+  }
+
+  if (credNodes.length > 0) {
+    lines.push('    subgraph credentials["🔑 Credentials"]');
+    lines.push(credNodes.join('\n'));
+    lines.push('    end');
+  }
+
+  if (apiNodes.length > 0) {
+    lines.push('    subgraph apis["🌐 External APIs"]');
+    lines.push(apiNodes.join('\n'));
+    lines.push('    end');
+  }
+
+  if (channelNodes.length > 0) {
+    lines.push('    subgraph channels["📡 Delivery Channels"]');
+    lines.push(channelNodes.join('\n'));
+    lines.push('    end');
+  }
+
+  if (skillNodes.length > 0) {
+    lines.push('    subgraph skills["🛠️ Skill Scripts"]');
+    lines.push(skillNodes.join('\n'));
+    lines.push('    end');
+  }
+
+  // Render edges
+  if (edges.length > 0) {
+    lines.push('');
+    lines.push(edges.join('\n'));
+  }
+
+  // Add legend
+  lines.push('');
+  lines.push('    classDef disabled fill:#555,color:#fff,stroke:#999');
+  lines.push('    classDef credential fill:#f9e2af,stroke:#e0a800,color:#333');
+  lines.push('    classDef api fill:#89b4fa,stroke:#3b82f6,color:#333');
+  lines.push('    classDef channel fill:#a6e3a1,stroke:#22c55e,color:#333');
+  lines.push('    classDef skill fill:#cba6f7,stroke:#a855f7,color:#333');
+
+  // Style disabled job nodes
+  for (const [id, { job }] of jobDeps) {
+    if (!job.enabled) {
+      lines.push(`    class ${sanitizeMermaidId(`job_${job.id}`)} disabled`);
+    }
+  }
+
+  // Style resource nodes by category
+  for (const cred of seenCreds) lines.push(`    class ${sanitizeMermaidId(`cred_${cred}`)} credential`);
+  for (const api of seenApis) lines.push(`    class ${sanitizeMermaidId(`api_${api}`)} api`);
+  for (const ch of seenChannels) lines.push(`    class ${sanitizeMermaidId(`ch_${ch}`)} channel`);
+  for (const skill of seenSkills) lines.push(`    class ${sanitizeMermaidId(`skill_${skill}`)} skill`);
+
+  lines.push('');
+  return lines.join('\n');
+}
+
 // ── Main ──────────────────────────────────────────────────────────────
 function main() {
   const jobs = loadCronJobs();
@@ -465,6 +603,12 @@ function main() {
     }
 
     console.log(JSON.stringify(output, null, 2));
+    return;
+  }
+
+  // Mermaid graph mode
+  if (flags.mermaid) {
+    console.log(formatMermaid(jobs, resourceMap, jobDeps));
     return;
   }
 
