@@ -11,6 +11,7 @@ const args = process.argv.slice(2);
 const jsonOut = args.includes('--json');
 const quiet = args.includes('--quiet') || args.includes('-q');
 const brief = args.includes('--brief');
+const includeEnergy = args.includes('--energy') || args.includes('-e');
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log('morning-briefing — Generate a morning briefing from multiple sources');
@@ -20,6 +21,7 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log('  --json     JSON output');
   console.log('  --brief    Only show warnings/issues');
   console.log('  --quiet    Suppress stdout (exit code only)');
+  console.log('  --energy   Include energy summary + benchmark section');
   console.log('  --help     Show this help');
   process.exit(0);
 }
@@ -132,6 +134,36 @@ function main() {
     }
   }
 
+  // 5. Energy summary + benchmark (optional)
+  if (includeEnergy) {
+    const energySection = { available: false };
+
+    // Try energy-summary
+    const energySummary = runScript('energy-summary/scripts/energy-summary.cjs', ['--yesterday', '--json']);
+    if (!energySummary._error) {
+      energySection.available = true;
+      energySection.summary = energySummary;
+      // Flag high-cost days
+      if (energySummary.totalCost && energySummary.totalCost > 10) {
+        briefing.warnings.push(`Energy: yesterday cost €${energySummary.totalCost.toFixed(2)} (high)`);
+      }
+    }
+
+    // Try energy-benchmark
+    const energyBenchmark = runScript('energy-benchmark/scripts/benchmark.mjs', ['--json']);
+    if (!energyBenchmark._error) {
+      energySection.available = true;
+      energySection.benchmark = energyBenchmark;
+      if (energyBenchmark.verdict === 'ABOVE_NORMAL') {
+        briefing.warnings.push(`Energy: ${energyBenchmark.pctDiff?.toFixed(0)}% above typical ${energyBenchmark.dayName || 'day'}`);
+      }
+    }
+
+    if (energySection.available) {
+      briefing.sections.energy = energySection;
+    }
+  }
+
   // Output
   if (jsonOut) {
     console.log(JSON.stringify(briefing, null, 2));
@@ -188,6 +220,26 @@ function printHumanBriefing(b) {
   if (slack) {
     console.log('💬 Slack (shared channel)');
     console.log(`   Recent messages (12h): ${slack.recentCount || 0}`);
+    console.log('');
+  }
+
+  // Energy
+  const energy = b.sections.energy;
+  if (energy && energy.available) {
+    console.log('⚡ Energy (yesterday)');
+    const sum = energy.summary;
+    if (sum) {
+      if (sum.totalConsumption !== undefined) console.log(`   Consumption: ${sum.totalConsumption?.toFixed(1) || '?'} kWh`);
+      if (sum.totalGeneration !== undefined) console.log(`   Solar: ${sum.totalGeneration?.toFixed(1) || '?'} kWh`);
+      if (sum.totalExport !== undefined) console.log(`   Export: ${sum.totalExport?.toFixed(1) || '?'} kWh`);
+      if (sum.totalCost !== undefined) console.log(`   Cost: €${sum.totalCost?.toFixed(2)}`);
+      if (sum.netCost !== undefined) console.log(`   Net cost: €${sum.netCost?.toFixed(2)}`);
+    }
+    const bench = energy.benchmark;
+    if (bench && !bench._error) {
+      const arrow = bench.verdict === 'ABOVE_NORMAL' ? '📈' : bench.verdict === 'BELOW_NORMAL' ? '📉' : '➡️';
+      console.log(`   ${arrow} ${bench.pctDiff?.toFixed(0) || '?'}% vs typical ${bench.dayName || 'day'}`);
+    }
     console.log('');
   }
 

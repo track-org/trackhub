@@ -16,6 +16,7 @@ It calls:
 - **credential-health** — all configured credential checks
 - **cron-dashboard** — cron fleet overview
 - **slack-channel-reader** — recent messages in shared agent channel
+- **energy-summary** + **energy-benchmark** — daily energy cost and comparison (when `--energy` is passed)
 
 ## Script
 
@@ -44,6 +45,7 @@ node morning-briefing.cjs --quiet
 | `--json` | | false | JSON output |
 | `--brief` | | false | Only show warnings/issues |
 | `--quiet` | `-q` | false | Suppress stdout, exit code only |
+| `--energy` | `-e` | false | Include energy summary + benchmark section |
 | `--help` | `-h` | | Show help |
 
 ## Output
@@ -69,6 +71,14 @@ Human-readable example:
 
 💬 Slack (shared channel)
    Recent messages (12h): 0
+
+⚡ Energy (yesterday)
+   Consumption: 28.3 kWh
+   Solar: 12.1 kWh
+   Export: 3.4 kWh
+   Cost: €9.42
+   Net cost: €8.15
+   📈 18% vs typical Thursday
 
 ⚠️  Warnings
    • Credential gmail-file: Refresh token invalid or revoked
