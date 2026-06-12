@@ -16,7 +16,6 @@ Cron job ID (for cooldown lookup):
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -49,20 +48,28 @@ def _get_cron_job_id() -> str:
     )
 
 
-def get_last_delivered_alert_ts(job_id: str) -> int:
+_STATE_FILE = _SCRIPT_DIR / '.export_alert_cooldown.json'
+
+
+def get_last_delivered_alert_ts(job_id: str) -> int:  # noqa: ARG001
+    """Read the timestamp of the last delivered alert from a local state file.
+
+    Uses a flat JSON file instead of `openclaw cron runs` because main-session
+    systemEvent jobs report deliveryStatus="not-requested" and never expose a
+    ``delivered: true`` entry.
+    """
     try:
-        out = subprocess.check_output(
-            ['openclaw', 'cron', 'runs', '--id', job_id, '--limit', '20'],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-        data = json.loads(out)
-        for entry in data.get('entries', []):
-            if entry.get('action') == 'finished' and entry.get('delivered') is True:
-                return int(entry.get('ts') or entry.get('runAtMs') or 0) // 1000
+        if _STATE_FILE.is_file():
+            data = json.loads(_STATE_FILE.read_text())
+            return int(data.get('last_alert_ts', 0))
     except Exception:
-        return 0
+        pass
     return 0
+
+
+def record_alert_delivered() -> None:
+    """Persist the current timestamp so future calls can enforce the cooldown."""
+    _STATE_FILE.write_text(json.dumps({'last_alert_ts': int(time.time())}))
 
 
 def main() -> None:
@@ -103,6 +110,7 @@ def main() -> None:
             msg.append(f'House load: {load_kw:.2f} kW')
         msg.append('Might be a good time to plug in the car.')
         message = '\n'.join(msg)
+        record_alert_delivered()
 
     print(json.dumps({
         'timestamp': now_ts,
